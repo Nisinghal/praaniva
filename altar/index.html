@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Praaniva — Diwali Pooja Kit</title>
+<meta name="description" content="A thoughtfully curated Diwali pooja kit for your home. Order on WhatsApp or by phone.">
+<meta name="theme-color" content="#8f141c">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500&family=Hind:wght@400;500;600&family=Tiro+Devanagari+Hindi&family=Homemade+Apple&display=swap" rel="stylesheet">
+<!--
+  Phase 1 of the "altar from above" site.
+  The whole page is one red pooja cloth seen from above. Scrolling moves the camera over it:
+  the closed Sampoorna Box sits in the middle, its lid lifts off, and what's inside spreads out
+  across the cloth. Click or tap any item to read what's in it.
+  Everything is drawn in code on one <canvas> (no images needed yet). The words also live in
+  <main class="copy"> for screen readers and search.
+-->
+<style>
+  :root {
+    --ivory: #f3eee2; --paper: #f8f3e8; --ink: #4e3c35; --ink-muted: #6e5a52;
+    --terra: #994131; --olive: #5d6340; --mustard: #b8973a; --cloth: #8f141c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--cloth); }
+  body { font-family: 'Hind', system-ui, sans-serif; color: var(--ink); overflow-x: hidden; }
+  #track { width: 1px; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .9s ease; }
+  body.on #scene { opacity: 1; }
+
+  .pill { position: fixed; z-index: 4; display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px;
+    border-radius: 999px; background: rgba(248, 243, 232, .95); color: var(--ink); font: 500 15px/1 'Hind', system-ui, sans-serif;
+    text-decoration: none; box-shadow: 0 1px 2px rgba(60, 10, 10, .25), 0 8px 20px rgba(60, 10, 10, .2);
+    transition: transform .2s ease, opacity .6s ease; }
+  .pill:hover { transform: translateY(-1px); }
+  .pill:focus-visible { outline: 2px solid var(--ivory); outline-offset: 2px; }
+  #brand { left: 16px; top: 16px; font: 700 20px/1 'Cormorant Garamond', serif; color: var(--terra); letter-spacing: .01em; }
+  #simple { right: 16px; top: 16px; }
+  #wa { right: 16px; bottom: 16px; background: var(--terra); color: var(--ivory); font-weight: 600; }
+  #wa svg { width: 18px; height: 18px; fill: currentColor; }
+  @media (max-width: 600px) { #simple { height: 36px; padding: 0 12px; font-size: 14px; top: 18px; } }
+
+  /* the nudge at the bottom: scroll first, then "tap an item" once the kit is spread out */
+  #hint { position: fixed; left: 50%; bottom: 16px; z-index: 3; transform: translateX(-50%); translate: 0 8px; pointer-events: none;
+    opacity: 0; height: 40px; padding: 0 16px; display: flex; align-items: center; gap: 10px; border-radius: 999px;
+    background: rgba(248, 243, 232, .95); font: 500 15px/1 'Hind', sans-serif; color: var(--ink);
+    box-shadow: 0 1px 2px rgba(60, 10, 10, .25), 0 8px 20px rgba(60, 10, 10, .2); transition: opacity .6s ease, translate .6s ease; }
+  #hint.on { opacity: 1; translate: 0 0; }
+  #hint i { width: 8px; height: 8px; border-radius: 50%; background: var(--terra); animation: hint 1.6s ease-in-out infinite; }
+  @keyframes hint { 0%, 100% { translate: 0 -3px; opacity: .5; } 50% { translate: 0 3px; opacity: 1; } }
+  @media (max-width: 600px) { #hint { bottom: 70px; } }
+
+  /* the paper slip that opens beside an item */
+  #card { position: fixed; left: 0; top: 0; z-index: 5; width: min(320px, calc(100vw - 32px)); padding: 22px 22px 20px;
+    background: var(--paper); border-radius: 6px; color: var(--ink);
+    box-shadow: 0 1px 2px rgba(60, 10, 10, .3), 0 18px 40px rgba(60, 10, 10, .35);
+    opacity: 0; scale: .92; rotate: -1.5deg; pointer-events: none; transform-origin: 0 0;
+    transition: opacity .18s ease, scale .35s cubic-bezier(.2, 1.5, .4, 1), rotate .35s cubic-bezier(.2, 1.5, .4, 1); }
+  #card.on { opacity: 1; scale: 1; rotate: .5deg; pointer-events: auto; }
+  #card::before { content: ""; position: absolute; inset: 7px; border: 1px solid rgba(153, 65, 49, .45); border-radius: 3px; pointer-events: none; }
+  #card .deva { font: 18px/1 'Tiro Devanagari Hindi', serif; color: var(--mustard); }
+  #card h2 { margin: 6px 0 12px; font: 700 28px/1.05 'Cormorant Garamond', serif; color: var(--terra); }
+  #card ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  #card li { padding: 4px 10px; border-radius: 999px; background: #ece2cf; font-size: 14px; line-height: 1.3; }
+  #card .x { position: absolute; right: 10px; top: 10px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent;
+    color: var(--ink-muted); font-size: 22px; line-height: 1; cursor: pointer; }
+  #card .x:hover { background: rgba(78, 60, 53, .08); }
+  #card .x:focus-visible { outline: 2px solid var(--terra); }
+  @media (prefers-reduced-motion: reduce) { #card { transition: opacity .15s ease; } #hint i { animation: none; } }
+
+  /* the words, for screen readers and search; the scene draws them on paper */
+  .copy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .nocanvas .copy { position: static; width: auto; height: auto; clip-path: none; white-space: normal; max-width: 640px;
+    margin: 80px auto; padding: 24px; background: var(--paper); line-height: 1.6; }
+</style>
+</head>
+<body>
+  <div id="track"></div>
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <a id="brand" class="pill" href="./">Praaniva</a>
+  <a id="simple" class="pill" href="../">Simple site &rarr;</a>
+  <a id="wa" class="pill" href="https://wa.me/919811797810?text=Hi%20Praaniva%2C%20I%27d%20like%20to%20order%20a%20Diwali%20pooja%20kit." target="_blank" rel="noopener">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.4-.3Z"/></svg>
+    Order on WhatsApp</a>
+  <div id="hint" aria-hidden="true"><i></i><span>Scroll to open the box</span></div>
+  <div id="card" role="dialog" aria-labelledby="card-title">
+    <button class="x" type="button" aria-label="Close">&times;</button>
+    <p class="deva"></p>
+    <h2 id="card-title"></h2>
+    <ul></ul>
+  </div>
+
+  <main class="copy">
+    <h1>Praaniva — Diwali Pooja Kit</h1>
+    <p>Rooted in ritual. Curated with care. A thoughtfully curated Diwali pooja kit for your home. Two kits, from ₹999.</p>
+    <h2>What's inside the Sampoorna Box</h2>
+    <h3>Pooja Samagri</h3><p>Roli, Mauli, Haldi ki gaanth, Haldi powder, Chandan powder, Akshat (rice), Supari, Laung, Elaichi, Mishri, Gangajal, Honey</p>
+    <h3>Diyas &amp; Lighting</h3><p>Mitti diya, Kamal jyot with T light, Cotton batti (long), Cotton batti (short), Tel, Desi ghee, Matchstick</p>
+    <h3>Havan &amp; Fragrance</h3><p>Havan cup, Dhoop cone, Bhimseni kapoor</p>
+    <h3>Decor &amp; Accessories</h3><p>Bandanwar, Decorated red cloth, Shubh laabh wooden stickers</p>
+    <h3>Guide &amp; Literature</h3><p>Lakshmi Ganesha image, Aarti book, Illustrated booklet with Lakshmi Ganesh, pooja vidhi and other Diwali related information</p>
+    <p><a href="https://wa.me/919811797810">Order on WhatsApp</a> · <a href="tel:+919811797810">Call +91 98117 97810</a> · <a href="../">Simple site</a></p>
+  </main>
+
+<script>
+(() => {
+  const cv = document.getElementById('scene');
+  const ctx = cv.getContext && cv.getContext('2d');
+  if (!ctx) { document.documentElement.classList.add('nocanvas'); return; }
+
+  const TAU = Math.PI * 2;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const range = (v, a, b) => clamp((v - a) / (b - a));
+  const easeIO = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  // a seeded random, so the cloth and the flowers fall the same way every visit
+  const rng = seed => { let s = seed >>> 0; return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+
+  const COL = { ivory: '#f3eee2', paper: '#f8f3e8', ink: '#4e3c35', muted: '#6e5a52', terra: '#994131', olive: '#5d6340',
+    mustard: '#b8973a', cloth: '#8f141c' };
+  const F = { display: '"Cormorant Garamond", serif', body: '"Hind", sans-serif', deva: '"Tiro Devanagari Hindi", serif', hand: '"Homemade Apple", cursive' };
+
+  // every object is painted once into its own little canvas (a sprite), a bit sharper than the screen needs
+  const SS = Math.min(3, (devicePixelRatio || 1) * 1.6);
+  function sprite(w, h, draw) {
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(w * SS); c.height = Math.ceil(h * SS);
+    const g = c.getContext('2d'); g.scale(SS, SS); g.lineCap = 'round'; g.lineJoin = 'round';
+    draw(g, w, h);
+    return { c, w, h };
+  }
+  const rrect = (g, x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
+  function fitText(g, text, font, size, maxW) {
+    g.font = font.replace('{s}', size);
+    const w = g.measureText(text).width;
+    if (w > maxW) g.font = font.replace('{s}', size * maxW / w);
+  }
+  // paper: a warm sheet with a faint speckle, the way card stock looks up close
+  function paperFill(g, x, y, w, h, base, seed) {
+    g.fillStyle = base; g.fillRect(x, y, w, h);
+    const r = rng(seed);
+    for (let i = 0; i < w * h / 60; i++) {
+      g.fillStyle = r() < .5 ? 'rgba(120, 90, 60, .07)' : 'rgba(255, 255, 255, .25)';
+      g.fillRect(x + r() * w, y + r() * h, .8, .8);
+    }
+  }
+
+  /* ---------- the cloth ---------- */
+  // a small tile of woven red, repeated: threads one way, then the other, each a touch lighter or darker
+  const weave = sprite(24, 24, (g, w, h) => {
+    g.fillStyle = COL.cloth; g.fillRect(0, 0, w, h);
+    const r = rng(7);
+    for (let y = 0; y < h; y += 1.5) { g.fillStyle = `rgba(${r() < .5 ? '255,90,90' : '40,0,5'}, ${.05 + r() * .07})`; g.fillRect(0, y, w, .8); }
+    for (let x = 0; x < w; x += 1.5) { g.fillStyle = `rgba(${r() < .5 ? '255,120,110' : '30,0,4'}, ${.04 + r() * .06})`; g.fillRect(x, 0, .8, h); }
+  });
+  // the gold gota border, sewn along both sides of the cloth
+  const gota = sprite(48, 40, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, w, 0);
+    gr.addColorStop(0, '#9b6f1c'); gr.addColorStop(.2, '#e2b649'); gr.addColorStop(.5, '#f6d77a'); gr.addColorStop(.8, '#d9a93c'); gr.addColorStop(1, '#8e6417');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(110, 70, 10, .55)'; g.lineWidth = 1.2;
+    g.beginPath(); for (let y = -10; y <= h + 10; y += 10) { g.lineTo(y % 20 === 0 ? 8 : w - 8, y); } g.stroke();
+    g.fillStyle = 'rgba(255, 250, 220, .9)';
+    for (let y = 5; y < h; y += 20) { g.beginPath(); g.arc(w / 2, y, 2.2, 0, TAU); g.fill(); }
+    g.fillStyle = '#6e1016'; g.fillRect(0, 0, 3, h); g.fillRect(w - 3, 0, 3, h);
+  });
+  let weavePat, gotaPat;
+
+  /* ---------- the props ---------- */
+  function diyaSprite(seed) {
+    return sprite(96, 76, (g, w, h) => {
+      const r = rng(seed);
+      g.translate(w / 2 - 6, h / 2);
+      const body = s => { g.beginPath(); g.moveTo(40 * s, 0); g.bezierCurveTo(26 * s, -10 * s, 22 * s, -30 * s, 0, -30 * s);
+        g.bezierCurveTo(-24 * s, -30 * s, -36 * s, -16 * s, -36 * s, 0); g.bezierCurveTo(-36 * s, 16 * s, -24 * s, 30 * s, 0, 30 * s);
+        g.bezierCurveTo(22 * s, 30 * s, 26 * s, 10 * s, 40 * s, 0); g.closePath(); };
+      let gr = g.createRadialGradient(-8, -10, 4, 0, 0, 44);
+      gr.addColorStop(0, '#cf7140'); gr.addColorStop(.65, '#a54b22'); gr.addColorStop(1, '#6a2a10');
+      body(1); g.fillStyle = gr; g.fill();
+      // painted dots round the rim
+      for (let i = 0; i < 22; i++) {
+        const a = .5 + i / 22 * (TAU - 1);
+        g.fillStyle = i % 2 ? '#f6d36b' : '#fff1d0';
+        g.beginPath(); g.arc(-3 + Math.cos(a) * 30, Math.sin(a) * 25, 1.6, 0, TAU); g.fill();
+      }
+      // the well of ghee
+      g.save(); g.translate(-3, 0);
+      gr = g.createRadialGradient(-4, -4, 2, 0, 0, 24);
+      gr.addColorStop(0, '#8a5a1e'); gr.addColorStop(1, '#3b1a08');
+      body(.66); g.fillStyle = gr; g.fill();
+      g.fillStyle = 'rgba(255, 230, 160, .28)'; g.beginPath(); g.ellipse(-6, -6, 8, 4, -.5, 0, TAU); g.fill();
+      g.restore();
+      g.strokeStyle = '#f4ead2'; g.lineWidth = 3; g.beginPath(); g.moveTo(16, 0); g.lineTo(30, 0); g.stroke();
+      g.fillStyle = '#2a160a'; g.beginPath(); g.arc(31, 0, 1.8, 0, TAU); g.fill();
+      r();
+    });
+  }
+  const DIYA_WICK = 25; // from the sprite's middle to the tip of the wick
+
+  function marigoldSprite(seed, yellow) {
+    return sprite(50, 50, (g, w, h) => {
+      const r = rng(seed);
+      const pal = yellow ? ['#e9a90c', '#f6c01d', '#fbd447', '#fde27a'] : ['#d9650a', '#ee7d10', '#f6951f', '#fbb04a'];
+      g.translate(w / 2, h / 2);
+      for (let ring = 3; ring >= 0; ring--) {
+        const rad = 5 + ring * 5.4, n = 7 + ring * 5;
+        for (let i = 0; i < n; i++) {
+          const a = i / n * TAU + r() * .5 + ring;
+          g.fillStyle = pal[3 - ring];
+          g.beginPath(); g.ellipse(Math.cos(a) * rad * .82, Math.sin(a) * rad * .82, 6 - ring * .5, 4.2, a, 0, TAU); g.fill();
+          g.strokeStyle = 'rgba(120, 40, 0, .22)'; g.lineWidth = .6; g.stroke();
+        }
+      }
+      g.fillStyle = yellow ? '#b97a06' : '#a2470a'; g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.fill();
+    });
+  }
+  function leafSprite(seed) {
+    return sprite(30, 70, (g, w, h) => {
+      g.translate(w / 2, h / 2);
+      const gr = g.createLinearGradient(-12, 0, 12, 0); gr.addColorStop(0, '#2f5a1e'); gr.addColorStop(.5, '#4f8a2c'); gr.addColorStop(1, '#2c5219');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(0, -32); g.bezierCurveTo(13, -14, 12, 14, 0, 32); g.bezierCurveTo(-12, 14, -13, -14, 0, -32); g.fill();
+      g.strokeStyle = 'rgba(220, 240, 170, .5)'; g.lineWidth = .9; g.beginPath(); g.moveTo(0, -28); g.lineTo(0, 30); g.stroke();
+    });
+  }
+
+  function thaliSprite() {
+    return sprite(270, 270, (g, w, h) => {
+      g.translate(w / 2, h / 2);
+      let gr = g.createRadialGradient(-40, -40, 10, 0, 0, 132);
+      gr.addColorStop(0, '#f6db8a'); gr.addColorStop(.55, '#d4a23e'); gr.addColorStop(.92, '#a7771f'); gr.addColorStop(1, '#7b5512');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 128, 0, TAU); g.fill();
+      gr = g.createRadialGradient(30, 30, 10, 0, 0, 112);
+      gr.addColorStop(0, '#e8c25f'); gr.addColorStop(1, '#b8862a');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 110, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(110, 70, 10, .35)'; g.lineWidth = 1.2;
+      for (const rr of [104, 97, 44]) { g.beginPath(); g.arc(0, 0, rr, 0, TAU); g.stroke(); }
+      for (let i = 0; i < 28; i++) { // engraved leaves round the rim
+        g.save(); g.rotate(i / 28 * TAU); g.beginPath(); g.ellipse(0, -101, 2.2, 4.5, 0, 0, TAU); g.stroke(); g.restore();
+      }
+      g.strokeStyle = 'rgba(255, 250, 220, .45)'; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 120, 3.6, 4.6); g.stroke();
+      const bowls = [['#c8102e', '#7d0818'], ['#f2b418', '#b98306'], ['#f6f1e4', '#cfc6b0'], ['#ecd3a5', '#bf9c66']];
+      bowls.forEach(([c1, c2], i) => {
+        const a = TAU / 8 + i * TAU / 4, x = Math.cos(a) * 68, y = Math.sin(a) * 68;
+        let b = g.createRadialGradient(x - 6, y - 6, 2, x, y, 24); b.addColorStop(0, '#f3d27a'); b.addColorStop(1, '#8e6418');
+        g.fillStyle = b; g.beginPath(); g.arc(x, y, 23, 0, TAU); g.fill();
+        b = g.createRadialGradient(x - 5, y - 5, 1, x, y, 18); b.addColorStop(0, c1); b.addColorStop(1, c2);
+        g.fillStyle = b; g.beginPath(); g.arc(x, y, 17, 0, TAU); g.fill();
+        if (i === 2) { const r = rng(5); g.fillStyle = '#fffdf6'; for (let k = 0; k < 40; k++) { g.beginPath();
+          g.ellipse(x + (r() - .5) * 26, y + (r() - .5) * 26, 2.2, 1, r() * TAU, 0, TAU); g.fill(); } }
+      });
+    });
+  }
+
+  function boxBaseSprite() {
+    return sprite(300, 220, (g, w, h) => {
+      rrect(g, 0, 0, w, h, 6); g.fillStyle = '#e9dcc3'; g.fill();
+      g.fillStyle = COL.terra; rrect(g, 3, 3, w - 6, h - 6, 5); g.fill();
+      const ix = 12, iy = 12, iw = w - 24, ih = h - 24;
+      paperFill(g, ix, iy, iw, ih, '#efe4cf', 11);
+      // the inside is in shade near the walls
+      const sh = (x0, y0, x1, y1) => { const gr = g.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, 'rgba(70, 30, 15, .35)'); gr.addColorStop(1, 'rgba(70, 30, 15, 0)'); g.fillStyle = gr; g.fillRect(ix, iy, iw, ih); };
+      sh(ix, iy, ix, iy + 30); sh(ix, iy, ix + 30, iy); sh(ix + iw, iy, ix + iw - 18, iy);
+      // tissue paper, crumpled
+      const r = rng(21);
+      for (let i = 0; i < 14; i++) {
+        g.fillStyle = `rgba(255, 252, 244, ${.35 + r() * .3})`; g.beginPath();
+        const cx = ix + r() * iw, cy = iy + r() * ih;
+        for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + r(); g.lineTo(cx + Math.cos(a) * (20 + r() * 30), cy + Math.sin(a) * (16 + r() * 24)); }
+        g.fill();
+        g.strokeStyle = 'rgba(150, 120, 90, .18)'; g.lineWidth = .8; g.stroke();
+      }
+    });
+  }
+  function lidSprite() {
+    return sprite(312, 232, (g, w, h) => {
+      rrect(g, 0, 0, w, h, 6); g.save(); g.clip(); paperFill(g, 0, 0, w, h, '#f5eddd', 3); g.restore();
+      g.strokeStyle = COL.terra; g.lineWidth = 2.5; g.strokeRect(12, 12, w - 24, h - 24);
+      g.lineWidth = 1; g.strokeRect(18, 18, w - 36, h - 36);
+      g.fillStyle = COL.mustard;
+      for (const [x, y] of [[18, 18], [w - 18, 18], [18, h - 18], [w - 18, h - 18]]) star(g, x, y, 6);
+      // the ribbon, down one side, and its bow
+      const rx = w * .76;
+      let gr = g.createLinearGradient(rx - 14, 0, rx + 14, 0);
+      gr.addColorStop(0, '#9f7b27'); gr.addColorStop(.5, '#d9b75a'); gr.addColorStop(1, '#9f7b27');
+      g.fillStyle = gr; g.fillRect(rx - 14, 0, 28, h);
+      g.strokeStyle = 'rgba(255, 245, 210, .5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(rx - 9, 0); g.lineTo(rx - 9, h); g.moveTo(rx + 9, 0); g.lineTo(rx + 9, h); g.stroke();
+      g.save(); g.translate(rx, h * .48);
+      g.shadowColor = 'rgba(60, 30, 0, .35)'; g.shadowBlur = 6; g.shadowOffsetY = 2;
+      for (const s of [-1, 1]) {
+        g.save(); g.rotate(s * .9); g.fillStyle = gr; g.beginPath(); g.ellipse(0, -26, 13, 26, 0, 0, TAU); g.fill();
+        g.fillStyle = 'rgba(90, 60, 10, .35)'; g.beginPath(); g.ellipse(0, -22, 5, 14, 0, 0, TAU); g.fill(); g.restore();
+        g.save(); g.rotate(s * .35 + Math.PI); g.fillStyle = gr; g.beginPath(); g.moveTo(-7, 6); g.lineTo(7, 6); g.lineTo(10, 46); g.lineTo(0, 40); g.lineTo(-10, 46); g.closePath(); g.fill(); g.restore();
+      }
+      g.fillStyle = '#c7a347'; g.beginPath(); g.arc(0, 0, 9, 0, TAU); g.fill();
+      g.restore();
+      // the name, printed
+      const cx = w * .37;
+      g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      g.fillStyle = COL.mustard; g.font = `20px ${F.deva}`; g.fillText('सम्पूर्ण', cx, 74);
+      g.fillStyle = COL.terra; g.font = `700 44px ${F.display}`; g.fillText('Praaniva', cx, 120);
+      g.strokeStyle = COL.mustard; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - 60, 138); g.lineTo(cx - 10, 138); g.moveTo(cx + 10, 138); g.lineTo(cx + 60, 138); g.stroke();
+      star(g, cx, 138, 5);
+      g.fillStyle = COL.ink; g.font = `500 10px ${F.body}`; if ('letterSpacing' in g) g.letterSpacing = '3px';
+      g.fillText('SAMPOORNA BOX', cx + 1.5, 162);
+      g.fillStyle = COL.muted; g.font = `italic 500 15px ${F.display}`; if ('letterSpacing' in g) g.letterSpacing = '0px';
+      g.fillText('Diwali Pooja Kit', cx, 184);
+    });
+  }
+  function star(g, x, y, s) { // the four-point star from the brand's ornament
+    g.beginPath(); g.moveTo(x, y - s); g.quadraticCurveTo(x, y, x + s, y); g.quadraticCurveTo(x, y, x, y + s);
+    g.quadraticCurveTo(x, y, x - s, y); g.quadraticCurveTo(x, y, x, y - s); g.fill();
+  }
+  function heroCardSprite() {
+    return sprite(340, 200, (g, w, h) => {
+      paperFill(g, 0, 0, w, h, COL.paper, 9);
+      g.strokeStyle = 'rgba(153, 65, 49, .5)'; g.lineWidth = 1; g.strokeRect(9, 9, w - 18, h - 18);
+      g.textAlign = 'center';
+      g.fillStyle = COL.mustard; g.font = `17px ${F.deva}`; g.fillText('परंपरा', w / 2, 44);
+      g.fillStyle = COL.terra; fitText(g, 'Diwali Pooja Kit', `600 {s}px ${F.display}`, 46, w - 50); g.fillText('Diwali Pooja Kit', w / 2, 92);
+      g.fillStyle = COL.ink; fitText(g, 'Rooted in ritual. Curated with care.', `{s}px ${F.hand}`, 15, w - 50);
+      g.fillText('Rooted in ritual. Curated with care.', w / 2, 134);
+      g.fillStyle = COL.olive; g.font = `500 14px ${F.body}`; g.fillText('Two kits, from ₹999 · 20% off', w / 2, 172);
+    });
+  }
+  function headingSprite() {
+    return sprite(440, 140, (g, w, h) => {
+      paperFill(g, 0, 0, w, h, COL.paper, 13);
+      g.strokeStyle = 'rgba(153, 65, 49, .5)'; g.lineWidth = 1; g.strokeRect(9, 9, w - 18, h - 18);
+      g.textAlign = 'center';
+      g.fillStyle = COL.mustard; g.font = `18px ${F.deva}`; g.fillText('सामग्री', w / 2, 42);
+      g.fillStyle = COL.terra; g.font = `600 48px ${F.display}`; g.fillText("What's inside", w / 2, 90);
+      g.fillStyle = COL.olive; g.font = `500 11px ${F.body}`; if ('letterSpacing' in g) g.letterSpacing = '3px';
+      g.fillText('THE SAMPOORNA BOX', w / 2 + 1.5, 117);
+    });
+  }
+  function tagSprite(title, touch) {
+    const tmp = document.createElement('canvas').getContext('2d'); tmp.font = `700 21px ${F.display}`;
+    const w = Math.ceil(tmp.measureText(title).width) + 44;
+    return sprite(w, 52, (g, w, h) => {
+      rrect(g, 0, 0, w, h, 4); g.save(); g.clip(); paperFill(g, 0, 0, w, h, COL.paper, title.length); g.restore();
+      g.fillStyle = COL.terra; g.beginPath(); g.arc(13, h / 2, 3, 0, TAU); g.fill(); // the punched hole
+      g.textAlign = 'center';
+      g.fillStyle = COL.terra; g.font = `700 21px ${F.display}`; g.fillText(title, w / 2 + 5, 25);
+      g.fillStyle = COL.muted; g.font = `400 11px ${F.body}`; g.fillText(touch ? 'tap to look inside' : 'click to look inside', w / 2 + 5, 41);
+    });
+  }
+
+  /* ---------- the five things inside the box ---------- */
+  function mound(g, x, y, rad, c1, c2, seed, grains) {
+    const gr = g.createRadialGradient(x - rad * .3, y - rad * .35, 1, x, y, rad);
+    gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, rad, 0, TAU); g.fill();
+    const r = rng(seed);
+    for (let i = 0; i < rad * 3; i++) {
+      const a = r() * TAU, d = Math.sqrt(r()) * rad * .92;
+      g.fillStyle = grains || (r() < .5 ? 'rgba(255,255,255,.25)' : 'rgba(0,0,0,.12)');
+      g.beginPath(); g.ellipse(x + Math.cos(a) * d, y + Math.sin(a) * d, grains ? 2.3 : .9, grains ? 1.1 : .9, r() * TAU, 0, TAU); g.fill();
+    }
+  }
+  function samagriSprite() {
+    return sprite(260, 210, (g, w, h) => {
+      g.translate(w / 2 - 18, h / 2);
+      // a pattal, the leaf plate
+      let gr = g.createRadialGradient(-20, -20, 10, 0, 0, 96);
+      gr.addColorStop(0, '#b8a967'); gr.addColorStop(1, '#7f7234');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 94, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(70, 60, 20, .35)'; g.lineWidth = 1;
+      for (let i = 0; i < 9; i++) { const a = i / 9 * TAU; g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(Math.cos(a + .3) * 50, Math.sin(a + .3) * 50, Math.cos(a) * 92, Math.sin(a) * 92); g.stroke(); }
+      g.setLineDash([2, 5]); g.beginPath(); g.arc(0, 0, 86, 0, TAU); g.stroke(); g.setLineDash([]);
+      mound(g, -36, -34, 24, '#e2213d', '#8f0a1f', 1);       // roli
+      mound(g, 34, -36, 23, '#f7c63a', '#c58605', 2);        // haldi
+      mound(g, 44, 28, 22, '#f2dcb2', '#bf9c66', 3);         // chandan
+      mound(g, -40, 32, 25, '#f6f1e4', '#d8cfb8', 4, '#fffdf6'); // akshat
+      const r = rng(6);
+      for (let i = 0; i < 7; i++) { // supari
+        const x = (r() - .5) * 30, y = (r() - .5) * 26;
+        const s = g.createRadialGradient(x - 2, y - 2, 1, x, y, 7); s.addColorStop(0, '#b07a4a'); s.addColorStop(1, '#5e3a1c');
+        g.fillStyle = s; g.beginPath(); g.arc(x, y, 6.5, 0, TAU); g.fill();
+      }
+      g.strokeStyle = '#3d2412'; g.lineWidth = 2;
+      for (let i = 0; i < 6; i++) { const x = 4 + r() * 20, y = 60 + r() * 14, a = r() * TAU; // laung
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * 9, y + Math.sin(a) * 9); g.stroke();
+        g.fillStyle = '#3d2412'; g.beginPath(); g.arc(x, y, 2.4, 0, TAU); g.fill(); }
+      // a coil of mauli, the red and yellow thread
+      g.translate(112, 50);
+      const cols = ['#d0142c', '#f2b418', '#d0142c', '#e8701a'];
+      for (let i = 0; i < 9; i++) { g.strokeStyle = cols[i % 4]; g.lineWidth = 2.4; g.beginPath(); g.arc(0, 0, 6 + i * 2.3, i * .4, i * .4 + TAU * .95); g.stroke(); }
+    });
+  }
+  function diyasSprite(diya) {
+    // two diyas, a bundle of cotton battis and a matchbox
+    const spots = [{ x: -58, y: -14, r: -.35, s: 1 }, { x: 56, y: 22, r: .45, s: .92 }];
+    const sp = sprite(250, 180, (g, w, h) => {
+      g.translate(w / 2, h / 2);
+      for (const d of spots) { g.save(); g.translate(d.x, d.y); g.rotate(d.r); g.scale(d.s, d.s);
+        g.shadowColor = 'rgba(40, 0, 0, .45)'; g.shadowBlur = 8; g.shadowOffsetY = 4;
+        g.drawImage(diya.c, -diya.w / 2, -diya.h / 2, diya.w, diya.h); g.restore(); }
+      g.strokeStyle = '#fbf6e8'; g.lineWidth = 2.2;
+      for (let i = 0; i < 7; i++) { g.beginPath(); g.moveTo(-100 + i * 3, 52 + i * 2); g.quadraticCurveTo(-60, 46 + i * 3, -26 + i * 2, 64 + i); g.stroke(); }
+      g.save(); g.translate(76, -50); g.rotate(.2);
+      g.shadowColor = 'rgba(40, 0, 0, .4)'; g.shadowBlur = 6; g.shadowOffsetY = 3;
+      g.fillStyle = '#f2c230'; g.fillRect(-26, -16, 52, 32); g.shadowColor = 'transparent';
+      g.fillStyle = '#c3262b'; g.fillRect(-26, -5, 52, 10); g.fillStyle = '#5a2a14'; g.fillRect(-26, -16, 4, 32);
+      g.restore();
+    });
+    sp.flames = spots.map(d => ({ x: d.x + Math.cos(d.r) * DIYA_WICK * d.s, y: d.y + Math.sin(d.r) * DIYA_WICK * d.s, k: d.s }));
+    return sp;
+  }
+  function havanSprite() {
+    const sp = sprite(230, 210, (g, w, h) => {
+      g.translate(w / 2, h / 2);
+      // the havan cup, pressed cow dung and herbs
+      let gr = g.createRadialGradient(-50, -15, 6, -34, 4, 62);
+      gr.addColorStop(0, '#8a6844'); gr.addColorStop(.8, '#5e4128'); gr.addColorStop(1, '#3d2916');
+      g.shadowColor = 'rgba(40, 0, 0, .45)'; g.shadowBlur = 10; g.shadowOffsetY = 5;
+      g.fillStyle = gr; g.beginPath(); g.arc(-34, 4, 60, 0, TAU); g.fill(); g.shadowColor = 'transparent';
+      const r = rng(8);
+      for (let i = 0; i < 160; i++) { const a = r() * TAU, d = Math.sqrt(r()) * 58;
+        g.fillStyle = r() < .5 ? 'rgba(160, 130, 80, .4)' : 'rgba(30, 20, 10, .3)'; g.fillRect(-34 + Math.cos(a) * d, 4 + Math.sin(a) * d, 1.5, 1.5); }
+      gr = g.createRadialGradient(-34, 4, 2, -34, 4, 26); gr.addColorStop(0, '#2a1d12'); gr.addColorStop(1, '#4a3420');
+      g.fillStyle = gr; g.beginPath(); g.arc(-34, 4, 25, 0, TAU); g.fill();
+      for (let i = 0; i < 14; i++) { g.fillStyle = ['#c9a24a', '#7a4a20', '#d8c08a'][i % 3]; g.beginPath(); g.arc(-34 + (r() - .5) * 34, 4 + (r() - .5) * 34, 2, 0, TAU); g.fill(); }
+      // a dhoop cone, lit
+      g.shadowColor = 'rgba(40, 0, 0, .45)'; g.shadowBlur = 6; g.shadowOffsetY = 3;
+      gr = g.createRadialGradient(62, -44, 1, 62, -44, 15); gr.addColorStop(0, '#d9532a'); gr.addColorStop(.25, '#6b4a33'); gr.addColorStop(1, '#3b281a');
+      g.fillStyle = gr; g.beginPath(); g.arc(62, -44, 15, 0, TAU); g.fill();
+      // bhimseni kapoor
+      g.fillStyle = '#fbfaf5';
+      for (const [x, y, a] of [[50, 40, .2], [74, 52, -.3], [60, 66, .5]]) { g.save(); g.translate(x, y); g.rotate(a); rrect(g, -9, -9, 18, 18, 4); g.fill(); g.restore(); }
+    });
+    sp.smoke = { x: 62, y: -44 };
+    return sp;
+  }
+  function decorSprite(m1, m2, leaf) {
+    return sprite(410, 180, (g, w, h) => {
+      g.translate(w / 2, h / 2 - 20);
+      const pt = t => { const x = lerp(-190, 190, t); return [x, -38 + 52 * (1 - Math.pow(2 * t - 1, 2))]; };
+      const put = (s, x, y, a, k = 1) => { g.save(); g.translate(x, y); g.rotate(a); g.scale(k, k); g.drawImage(s.c, -s.w / 2, -s.h / 2, s.w, s.h); g.restore(); };
+      g.shadowColor = 'rgba(40, 0, 0, .4)'; g.shadowBlur = 5; g.shadowOffsetY = 3;
+      // strands hanging from the garland
+      for (const t of [.12, .31, .5, .69, .88]) {
+        const [x, y] = pt(t);
+        put(leaf, x, y + 74, 0, .7);
+        for (let k = 0; k < 3; k++) put(k % 2 ? m2 : m1, x, y + 16 + k * 17, k, .62);
+      }
+      // the garland itself: marigold, leaf, marigold
+      for (let i = 0; i <= 22; i++) {
+        const t = i / 22, [x, y] = pt(t);
+        if (i % 2) put(leaf, x, y + 4, (t - .5) * .8 + Math.PI * (i % 4 === 1 ? .1 : -.1), .62);
+        else put(i % 4 ? m2 : m1, x, y, i, .72);
+      }
+      // shubh and laabh, little wooden plaques
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (const [x, word, a] of [[-150, 'शुभ', -.12], [150, 'लाभ', .1]]) {
+        g.save(); g.translate(x, 96); g.rotate(a);
+        g.fillStyle = '#a8171e'; rrect(g, -38, -19, 76, 38, 8); g.fill(); g.shadowColor = 'transparent';
+        g.strokeStyle = '#e6b84a'; g.lineWidth = 2; rrect(g, -33, -14, 66, 28, 6); g.stroke();
+        g.fillStyle = '#f2c95a'; g.font = `22px ${F.deva}`; g.fillText(word, 0, 3); g.restore();
+      }
+    });
+  }
+  function guideSprite() {
+    return sprite(240, 220, (g, w, h) => {
+      g.translate(w / 2, h / 2);
+      g.shadowColor = 'rgba(40, 0, 0, .45)'; g.shadowBlur = 10; g.shadowOffsetY = 5;
+      // the aarti book, behind
+      g.save(); g.translate(38, -18); g.rotate(.2);
+      g.fillStyle = '#c9a446'; g.fillRect(-58, -78, 116, 156); g.shadowColor = 'transparent';
+      g.strokeStyle = '#7a3224'; g.lineWidth = 1.5; g.strokeRect(-50, -70, 100, 140);
+      g.fillStyle = '#7a3224'; g.textAlign = 'center'; g.font = `22px ${F.deva}`; g.fillText('आरती', 0, 54);
+      g.restore();
+      // the illustrated booklet, in front
+      g.save(); g.translate(-20, 10); g.rotate(-.08);
+      g.shadowColor = 'rgba(40, 0, 0, .45)'; g.shadowBlur = 10; g.shadowOffsetY = 5;
+      g.fillStyle = COL.paper; g.fillRect(-70, -90, 140, 180); g.shadowColor = 'transparent';
+      paperFill(g, -70, -90, 140, 180, COL.paper, 17);
+      g.strokeStyle = COL.terra; g.lineWidth = 2; g.strokeRect(-62, -82, 124, 164); g.lineWidth = .8; g.strokeRect(-58, -78, 116, 156);
+      for (let i = 0; i < 8; i++) { // a lotus
+        g.save(); g.translate(0, -28); g.rotate(i / 8 * TAU); g.fillStyle = i % 2 ? '#c98b8b' : '#b0574a';
+        g.beginPath(); g.ellipse(0, -16, 7, 16, 0, 0, TAU); g.fill(); g.restore(); }
+      g.fillStyle = COL.mustard; g.beginPath(); g.arc(0, -28, 6, 0, TAU); g.fill();
+      g.textAlign = 'center';
+      g.fillStyle = COL.terra; g.font = `22px ${F.deva}`; g.fillText('पूजा विधि', 0, 30);
+      g.fillStyle = COL.ink; g.font = `italic 500 13px ${F.display}`; g.fillText('Lakshmi Ganesh Pooja', 0, 50);
+      g.fillStyle = COL.muted; g.font = `500 7px ${F.body}`; if ('letterSpacing' in g) g.letterSpacing = '2px'; g.fillText('PRAANIVA', 1, 70);
+      g.restore();
+    });
+  }
+
+  /* ---------- where everything sits ---------- */
+  // the world is 1000 units across; a phone sees the middle ~540 of it
+  const ITEMS = [
+    { id: 'samagri', title: 'Pooja Samagri', deva: 'पूजा सामग्री', list: ['Roli', 'Mauli', 'Haldi ki gaanth', 'Haldi powder', 'Chandan powder', 'Akshat (rice)', 'Supari', 'Laung', 'Elaichi', 'Mishri', 'Gangajal', 'Honey'] },
+    { id: 'diyas', title: 'Diyas & Lighting', deva: 'दीप', list: ['Mitti diya', 'Kamal jyot with T light', 'Cotton batti (long)', 'Cotton batti (short)', 'Tel', 'Desi ghee', 'Matchstick'] },
+    { id: 'havan', title: 'Havan & Fragrance', deva: 'हवन', list: ['Havan cup', 'Dhoop cone', 'Bhimseni kapoor'] },
+    { id: 'decor', title: 'Decor & Accessories', deva: 'सजावट', list: ['Bandanwar', 'Decorated red cloth', 'Shubh laabh wooden stickers'] },
+    { id: 'guide', title: 'Guide & Literature', deva: 'पुस्तिका', list: ['Lakshmi Ganesha image', 'Aarti book', 'Illustrated booklet: Lakshmi Ganesh, pooja vidhi and more'] },
+  ];
+  const LAYOUTS = {
+    wide: {
+      view: 1000, zHero: 1, zEnd: .95, camHero: 470, camEnd: 1160,
+      box: [500, 470], lidEnd: [790, 650, .22], card: [790, 300, .07], thali: [215, 330], heading: [500, 880], itemScale: 1,
+      diyas: [[280, 630, .5], [555, 735, 2.4], [880, 445, 3.6]],
+      items: { samagri: [300, 1080, -.06], diyas: [700, 1070, .05], havan: [230, 1330, .04], decor: [520, 1300, 0], guide: [790, 1330, .07] },
+    },
+    narrow: {
+      view: 540, zHero: 1.15, zEnd: .84, camHero: 440, camEnd: 1375,
+      box: [500, 500], lidEnd: [730, 600, .3], card: [500, 215, -.04], thali: [320, 745], heading: [500, 945], itemScale: .84,
+      diyas: [[300, 560, .5], [690, 800, 2.6]],
+      items: { samagri: [385, 1140, -.06], diyas: [630, 1160, .05], havan: [375, 1390, .04], guide: [630, 1400, .07], decor: [500, 1640, 0] },
+    },
+  };
+
+  /* ---------- state ---------- */
+  let vw = 0, vh = 0, dpr = 1, L = LAYOUTS.wide, base = 1, touch = matchMedia('(hover: none)').matches;
+  let p = 0, ps = 0, t0 = performance.now(), hovered = null, opened = null, ready = false;
+  const S = {}; // sprites
+  let scatter = [], folds = [];
+  const hoverAmt = {}; ITEMS.forEach(i => hoverAmt[i.id] = 0);
+  const track = document.getElementById('track'), hint = document.getElementById('hint'), card = document.getElementById('card');
+
+  function layout() {
+    vw = innerWidth; vh = innerHeight; dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
+    const next = vw < 720 ? LAYOUTS.narrow : LAYOUTS.wide;
+    base = Math.min(vw / next.view, vh / 700);
+    track.style.height = (vh * 5.2) + 'px';
+    if (next !== L || !scatter.length) { L = next; buildScatter(); }
+  }
+  // marigolds and loose petals strewn over the cloth, kept off the things that matter
+  function buildScatter() {
+    const r = rng(42), keep = [];
+    const add = (x, y, rad) => keep.push([x, y, rad]);
+    add(...L.box, 190); add(L.lidEnd[0], L.lidEnd[1], 175); add(L.card[0], L.card[1], 190); add(...L.thali, 150); add(...L.heading, 230);
+    L.diyas.forEach(d => add(d[0], d[1], 55));
+    Object.values(L.items).forEach(([x, y]) => add(x, y + 30, 170));
+    const clear = (x, y, pad) => keep.every(([kx, ky, kr]) => Math.hypot(x - kx, y - ky) > kr + pad);
+    scatter = [];
+    for (let i = 0; i < 900 && scatter.length < 110; i++) {
+      const x = 90 + r() * 820, y = 40 + r() * 1800, flower = r() < .3;
+      if (!clear(x, y, flower ? 22 : 6)) continue;
+      scatter.push(flower ? { type: 'flower', x, y, a: r() * TAU, k: .7 + r() * .4, yellow: r() < .4 }
+        : { type: 'petal', x, y, a: r() * TAU, k: .7 + r() * .6, c: ['#ee7d10', '#f6c01d', '#d9650a', '#c3262b'][Math.floor(r() * 4)] });
+    }
+    folds = Array.from({ length: 9 }, () => ({ x: r() * 1000, y: r() * 1900, rad: 200 + r() * 260, a: .1 + r() * .12 }));
+  }
+
+  function buildSprites() {
+    S.diya = diyaSprite(1); S.m1 = marigoldSprite(3, false); S.m2 = marigoldSprite(4, true); S.leaf = leafSprite(5);
+    S.thali = thaliSprite(); S.base = boxBaseSprite(); S.lid = lidSprite(); S.heroCard = heroCardSprite(); S.heading = headingSprite();
+    S.samagri = samagriSprite(); S.diyas = diyasSprite(S.diya); S.havan = havanSprite(); S.decor = decorSprite(S.m1, S.m2, S.leaf); S.guide = guideSprite();
+    ITEMS.forEach(i => { i.sprite = S[i.id]; i.tag = tagSprite(i.title, touch); });
+    const ptn = c => { const pt = ctx.createPattern(c.c, 'repeat'); pt.setTransform && pt.setTransform(new DOMMatrix().scale(1 / SS)); return pt; };
+    weavePat = ptn(weave); gotaPat = ptn(gota);
+  }
+
+  /* ---------- drawing ---------- */
+  function shadow(x, y, w, h, alpha, blur) {
+    const r = Math.max(w, h) / 2 + blur;
+    ctx.save(); ctx.translate(x, y); ctx.scale((w / 2 + blur) / r, (h / 2 + blur) / r);
+    const gr = ctx.createRadialGradient(0, 0, r * .45, 0, 0, r);
+    gr.addColorStop(0, `rgba(40, 0, 4, ${alpha})`); gr.addColorStop(1, 'rgba(40, 0, 4, 0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill(); ctx.restore();
+  }
+  // lift: 0 lying flat, 1 held up in the air. The higher it is, the bigger and softer its shadow
+  function place(s, x, y, a = 0, k = 1, lift = 0, round = false) {
+    const sw = s.w * k, sh = s.h * k;
+    shadow(x + 4 + lift * 22, y + 8 + lift * 34, sw * (round ? .9 : 1), sh * (round ? .9 : 1), .42 - lift * .14, 10 + lift * 30);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(k * (1 + lift * .08), k * (1 + lift * .08));
+    ctx.drawImage(s.c, -s.w / 2, -s.h / 2, s.w, s.h); ctx.restore();
+  }
+  const rot = (dx, dy, a) => [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
+  function flame(x, y, k, t, ph) {
+    const f = reduce ? 1 : 1 + .08 * Math.sin(t * 9 + ph) + .05 * Math.sin(t * 23 + ph * 2);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const R = 95 * k * f, gr = ctx.createRadialGradient(x, y, 0, x, y, R);
+    gr.addColorStop(0, 'rgba(255, 190, 90, .42)'); gr.addColorStop(.35, 'rgba(255, 140, 40, .14)'); gr.addColorStop(1, 'rgba(255, 120, 30, 0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-1.35 + (reduce ? 0 : Math.sin(t * 3 + ph) * .22));
+    const Ln = 24 * k * f, W = 7 * k;
+    const fg = ctx.createLinearGradient(0, W, 0, -Ln);
+    fg.addColorStop(0, '#fffbea'); fg.addColorStop(.35, '#ffd65c'); fg.addColorStop(.8, '#ff8a1e'); fg.addColorStop(1, 'rgba(255, 90, 20, 0)');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.moveTo(0, -Ln); ctx.bezierCurveTo(W, -Ln * .4, W, 0, 0, W * .7); ctx.bezierCurveTo(-W, 0, -W, -Ln * .4, 0, -Ln); ctx.fill();
+    ctx.restore();
+  }
+  function diyaAt(x, y, a, k, t, ph, lift = 0) {
+    place(S.diya, x, y, a, k, lift, true);
+    const [dx, dy] = rot(DIYA_WICK * k, 0, a); flame(x + dx, y + dy, k, t, ph);
+  }
+  function smoke(x, y, t, alpha) {
+    if (reduce) return;
+    ctx.save(); ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const ph = (t * .35 + i / 3) % 1;
+      ctx.strokeStyle = `rgba(255, 245, 235, ${alpha * .28 * Math.sin(ph * Math.PI)})`; ctx.lineWidth = 4 + ph * 10;
+      ctx.beginPath();
+      for (let s = 0; s <= 1.001; s += .1) {
+        const d = s * 80 * (.4 + ph), wob = Math.sin(s * 6 + t * 1.6 + i * 2) * 10 * s;
+        ctx.lineTo(x + d * .55 + wob, y - d * .8 + wob * .4);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!ready) return;
+    const t = (now - t0) / 1000;
+    ps = reduce ? p : ps + (p - ps) * .12;
+
+    // the camera: over the box, a breath closer as the lid lifts, then down to what's inside
+    const pan = easeIO(range(ps, .42, .78));
+    const cy = lerp(L.camHero, L.camEnd, pan) + Math.sin(range(ps, .1, .42) * Math.PI) * 40;
+    const zoom = lerp(L.zHero, L.zEnd, pan) * (1 + .06 * Math.sin(range(ps, .08, .45) * Math.PI));
+    const sc = base * zoom, cx = 500;
+    ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (vw / 2 - cx * sc), dpr * (vh / 2 - cy * sc));
+    view = { sc, cx, cy };
+    const x0 = cx - vw / 2 / sc, x1 = cx + vw / 2 / sc, y0 = cy - vh / 2 / sc, y1 = cy + vh / 2 / sc;
+
+    // the cloth, its gota, and the soft dips where it isn't quite flat
+    ctx.fillStyle = weavePat; ctx.fillRect(x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4);
+    for (const f of folds) {
+      if (f.y + f.rad < y0 || f.y - f.rad > y1) continue;
+      const gr = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.rad);
+      gr.addColorStop(0, `rgba(40, 0, 5, ${f.a})`); gr.addColorStop(1, 'rgba(40, 0, 5, 0)');
+      ctx.fillStyle = gr; ctx.fillRect(f.x - f.rad, f.y - f.rad, f.rad * 2, f.rad * 2);
+    }
+    ctx.fillStyle = gotaPat;
+    for (const gx of [22, 930]) { ctx.save(); ctx.translate(gx, 0); ctx.fillRect(0, y0 - 40, 48, y1 - y0 + 80); ctx.restore(); }
+
+    for (const s of scatter) {
+      if (s.y < y0 - 40 || s.y > y1 + 40) continue;
+      if (s.type === 'flower') place(s.yellow ? S.m2 : S.m1, s.x, s.y, s.a, s.k * .9, 0, true);
+      else { ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.a); ctx.fillStyle = s.c; ctx.beginPath(); ctx.ellipse(0, 0, 6 * s.k, 3.6 * s.k, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+    }
+
+    // the hero: thali, diyas, the card, and the box
+    place(S.thali, L.thali[0], L.thali[1], 0, 1, 0, true);
+    diyaAt(L.thali[0] - 8, L.thali[1] + 4, -.4, .8, t, 4);
+    L.diyas.forEach(([x, y, a], i) => diyaAt(x, y, a, 1, t, i * 1.7));
+    place(S.heroCard, L.card[0], L.card[1], L.card[2], 1);
+
+    const [bx, by] = L.box;
+    place(S.base, bx, by, -.02, 1);
+
+    // what's inside: each piece rises out of the box and is set down in its place
+    const items = [];
+    ITEMS.forEach((it, i) => {
+      const tt = range(ps, .22 + i * .035, .5 + i * .035);
+      if (tt <= 0) return;
+      const [tx, ty, ta] = L.items[it.id], e = easeIO(tt), arc = Math.sin(tt * Math.PI);
+      const h = hoverAmt[it.id] = lerp(hoverAmt[it.id], tt >= 1 && (hovered === it || opened === it) ? 1 : 0, reduce ? 1 : .18);
+      const x = lerp(bx, tx, e), y = lerp(by, ty, e) - arc * 40;
+      const a = lerp(i % 2 ? .6 : -.5, ta, easeOut(tt)) * (1 - h);
+      const k = lerp(.45, L.itemScale, easeOut(tt)), lift = Math.max(arc * .9, h * .5);
+      items.push({ it, x, y, a, k, lift, tt });
+    });
+    // the heading drops onto the cloth just before the pieces land
+    const hd = range(ps, .4, .52);
+    if (hd > 0) place(S.heading, L.heading[0], L.heading[1], -.015, 1 + (1 - easeOut(hd)) * .25, (1 - easeOut(hd)) * .9);
+    items.sort((a, b) => a.lift - b.lift);
+    for (const o of items) {
+      const s = o.it.sprite;
+      place(s, o.x, o.y, o.a, o.k, o.lift);
+      if (s.flames) s.flames.forEach((f, j) => { const [dx, dy] = rot(f.x * o.k * (1 + o.lift * .08), f.y * o.k * (1 + o.lift * .08), o.a); flame(o.x + dx, o.y + dy, f.k * o.k, t, j * 2.3); });
+      if (s.smoke) { const [dx, dy] = rot(s.smoke.x * o.k, s.smoke.y * o.k, o.a); smoke(o.x + dx, o.y + dy, t, o.tt); }
+      if (o.tt >= 1) place(o.it.tag, o.x, o.y + s.h * o.k / 2 + 18, (o.it.id.length % 2 ? -.04 : .035) * (1 - hoverAmt[o.it.id]), 1, hoverAmt[o.it.id] * .3);
+      o.it.screen = { x: (o.x - cx) * sc + vw / 2, y: (o.y - cy) * sc + vh / 2, w: s.w * o.k * sc, h: s.h * o.k * sc, live: o.tt >= 1 };
+    }
+
+    // the lid: lifted off, carried aside, set down at an angle
+    const lt = range(ps, .1, .3), le = easeIO(lt), larc = Math.sin(lt * Math.PI);
+    place(S.lid, lerp(bx, L.lidEnd[0], le), lerp(by, L.lidEnd[1], le) - larc * 60, lerp(-.02, L.lidEnd[2], le), 1, larc);
+
+    // a warm edge, as if lamplight falls off past the cloth
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const vg = ctx.createRadialGradient(cv.width / 2, cv.height / 2, Math.min(cv.width, cv.height) * .35, cv.width / 2, cv.height / 2, Math.hypot(cv.width, cv.height) * .6);
+    vg.addColorStop(0, 'rgba(30, 0, 0, 0)'); vg.addColorStop(1, 'rgba(30, 0, 0, .38)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, cv.width, cv.height);
+
+    if (opened) placeCard();
+    updateHint();
+  }
+  let view = { sc: 1, cx: 500, cy: 470 };
+
+  /* ---------- touching things ---------- */
+  function hit(px, py) {
+    for (const it of ITEMS) {
+      const s = it.screen; if (!s || !s.live) continue;
+      if (Math.abs(px - s.x) < s.w * .46 && Math.abs(py - s.y) < s.h * .46 + (py > s.y ? 40 : 0)) return it;
+    }
+    return null;
+  }
+  addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse') return;
+    if (card.contains(e.target)) return;
+    hovered = hit(e.clientX, e.clientY);
+    document.body.style.cursor = hovered ? 'pointer' : '';
+  });
+  cv.addEventListener('click', e => {
+    const it = hit(e.clientX, e.clientY);
+    if (it && it !== opened) openCard(it); else closeCard();
+  });
+  function openCard(it) {
+    opened = it; seenCard = true;
+    card.querySelector('.deva').textContent = it.deva;
+    card.querySelector('h2').textContent = it.title;
+    card.querySelector('ul').innerHTML = it.list.map(x => `<li>${x}</li>`).join('');
+    placeCard(); card.classList.add('on');
+  }
+  function closeCard() { opened = null; card.classList.remove('on'); }
+  card.querySelector('.x').addEventListener('click', closeCard);
+  addEventListener('keydown', e => { if (e.key === 'Escape') closeCard(); });
+  function placeCard() {
+    const s = opened.screen; if (!s) return;
+    const cw = card.offsetWidth, ch = card.offsetHeight, m = 16;
+    let x = s.x + s.w / 2 + 12, y = s.y - ch / 2;
+    if (x + cw > vw - m) x = s.x - s.w / 2 - cw - 12;           // no room on the right: the left
+    if (x < m) { x = clamp(s.x - cw / 2, m, vw - cw - m); y = s.y + s.h / 2 + 12; } // nor there: underneath
+    if (y + ch > vh - m) y = s.y - s.h / 2 - ch - 12;
+    card.style.translate = `${Math.round(clamp(x, m, vw - cw - m))}px ${Math.round(clamp(y, m, vh - ch - m))}px`;
+    if (s.y < -s.h || s.y > vh + s.h) closeCard(); // scrolled away from it
+  }
+
+  let seenCard = false, idle = 0, lastScroll = performance.now();
+  function updateHint() {
+    const span = hint.querySelector('span');
+    let msg = '', show = false;
+    if (ps < .08) { msg = 'Scroll to open the box'; show = performance.now() - lastScroll > 1200; }
+    else if (ps > .78 && !seenCard) { msg = touch ? 'Tap anything to look inside' : 'Click anything to look inside'; show = true; }
+    if (msg && span.textContent !== msg) span.textContent = msg;
+    hint.classList.toggle('on', show);
+  }
+
+  addEventListener('scroll', () => { p = clamp(scrollY / Math.max(1, track.offsetHeight - vh)); lastScroll = performance.now(); }, { passive: true });
+  addEventListener('resize', () => { layout(); p = clamp(scrollY / Math.max(1, track.offsetHeight - vh)); });
+
+  layout();
+  requestAnimationFrame(frame);
+  // wait for the type, so the printed words come out in the right faces
+  const fonts = [`700 44px ${F.display}`, `600 48px ${F.display}`, `italic 500 15px ${F.display}`, `500 14px ${F.body}`, `20px ${F.deva}`, `15px ${F.hand}`];
+  Promise.race([Promise.all(fonts.map(f => document.fonts.load(f, 'Praaniva पूजा'))), new Promise(r => setTimeout(r, 2500))])
+    .catch(() => {}).then(() => { buildSprites(); ready = true; document.body.classList.add('on'); p = clamp(scrollY / Math.max(1, track.offsetHeight - vh)); ps = p; });
+})();
+</script>
+</body>
+</html>
